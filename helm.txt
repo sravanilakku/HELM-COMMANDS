@@ -1,0 +1,101 @@
+https://www.youtube.com/watch?v=wuHpqRJMh6Y
+
+az (not installed)
+https://docs.microsoft.com/en-us/cli/azure/install-azure-cli-windows?view=azure-cli-latest&tabs=azure-cli
+$ProgressPreference = 'SilentlyContinue'; Invoke-WebRequest -Uri https://aka.ms/installazurecliwindows -OutFile .\AzureCLI.msi; Start-Process msiexec.exe -Wait -ArgumentList '/I AzureCLI.msi /quiet'; rm .\AzureCLI.msi
+
+choco (not installed)
+https://docs.chocolatey.org/en-us/choco/setup
+Set-ExecutionPolicy Bypass -Scope Process -Force; [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072; iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+Helm (not installed)
+choco install kubernetes-helm
+
+
+Create an Azure Container Registry
+-----------------------------------
+az group create --name myaksraj --location centralindia
+az acr create --resource-group myaksraj --name myacrraj --sku Basic
+
+Create an Azure Kubernetes Service cluster
+------------------------------------------
+
+az aks create -g myaksraj -n myaksraj --location centralindia --attach-acr myacrraj --generate-ssh-keys --node-vm-size standard_d11
+
+Connect to your AKS cluster
+----------------------------
+kubectl (not installed)
+az aks install-cli
+az aks get-credentials --resource-group myaksraj --name myaksraj
+kubectl (installed)
+
+Download the sample application
+----------------------------------
+choco install git
+git clone https://github.com/merajeshk/helmfiles.git
+cd dev-spaces/samples/nodejs/getting-started/webfrontend
+
+Create a Dockerfile (Not Text file)
+-----------------------
+FROM node:latest
+
+WORKDIR /webfrontend
+
+COPY package.json ./
+
+RUN npm install
+
+COPY . .
+
+EXPOSE 80
+CMD ["node","server.js"]
+
+
+Build and push the sample application to the ACR
+-------------------------------------------------
+az acr build --image webfrontend:v1 --registry myacrraj --file Dockerfile .
+
+
+Create your Helm chart
+-------------------------
+helm create webfrontend
+Modify Chart.yaml, Values.yaml with appropriate version of ACR Image
+
+======================Chart.Yaml=========================
+apiVersion: v2
+name: webfrontend
+description: A Helm chart for Kubernetes
+type: application
+version: 0.1.0
+appVersion: "v1"
+
+=======================Values.Yaml===========================
+replicaCount: 1
+
+image:
+  repository: lakshmanadockeracr.azurecr.io/webfrontend:v1
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+
+
+
+
+Run your Helm chart
+--------------------
+kubectl get service --watch
+helm install webfrontend webfrontend/
+kubectl get service --watch
+
+
+kubectl get pods
+
+Solove the issue of opening Kubernetes Dashboard
+kubectl delete clusterrolebinding kubernetes-dashboard
+kubectl create clusterrolebinding kubernetes-dashboard --clusterrole=cluster-admin --serviceaccount=kube-system:kubernetes-dashboard --user=clusterUser
+
+az aks browse --resource-group myaksraj --name myaksraj
+
+Change Replicas to 3:
+ helm upgrade webfrontend webfrontend
